@@ -11,24 +11,39 @@ pub fn build(b: *std.Build) void {
         .source_file = .{ .path = "libs/zig-network/network.zig" },
     });
 
-    const exe = b.addExecutable(.{
-        .name = "zgopher",
+    const server = b.addExecutable(.{
+        .name = "zgs",
+        .root_source_file = .{ .path = "src/server.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+    server.addModule("network", module);
+
+    b.installArtifact(server);
+
+    const client = b.addExecutable(.{
+        .name = "zgc",
         .root_source_file = .{ .path = "src/client.zig" },
         .target = target,
         .optimize = optimize,
     });
-    exe.addModule("network", module);
+    client.addModule("network", module);
 
-    b.installArtifact(exe);
+    b.installArtifact(client);
 
-    const run_cmd = b.addRunArtifact(exe);
-
-    run_cmd.step.dependOn(b.getInstallStep());
-
+    const client_run_cmd = b.addRunArtifact(client);
+    client_run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
-        run_cmd.addArgs(args);
+        client_run_cmd.addArgs(args);
     }
+    const client_run_step = b.step("run-client", "Run the app");
+    client_run_step.dependOn(&client_run_cmd.step);
 
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
+    const server_run_cmd = b.addRunArtifact(server);
+    server_run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        server_run_cmd.addArgs(args);
+    }
+    const server_run_step = b.step("run-server", "Run the app");
+    server_run_step.dependOn(&server_run_cmd.step);
 }
