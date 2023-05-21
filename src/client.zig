@@ -61,9 +61,35 @@ pub fn main() !void {
         if (line_type.isValid()) {
             //Print the nice name of the type
             std.debug.print("line: {s} \"{s}\"\n", .{ @tagName(line_type), line });
+
+            //Get the index of the first TAB
+            var idx1 = std.mem.indexOf(u8, line, "\t") orelse @panic("Invalid gopher line!");
+            var idx2 = std.mem.indexOfPos(u8, line, idx1 + 1, "\t") orelse @panic("Invalid gopher line!");
+            var idx3 = std.mem.indexOfPos(u8, line, idx2 + 1, "\t") orelse @panic("Invalid gopher line!");
+
+            try items.append(Item{
+                .type = line_type,
+                .display_string = try allocator.dupe(u8, line[0..idx1]),
+                .selector = try allocator.dupe(u8, line[(idx1 + 1)..idx2]),
+                .hostname = try allocator.dupe(u8, line[(idx2 + 1)..idx3]),
+                .port = try std.fmt.parseInt(u16, line[(idx3 + 1)..], 0),
+            });
         } else {
             //Print the raw ascii version of the type
             std.debug.print("line: {c} \"{s}\"\n", .{ raw_type, line });
         }
+    }
+
+    for (items.items) |itema| {
+        var item: Item = itema;
+
+        var type_prefix = switch (item.type) {
+            .file => "F ",
+            .directory => "D ",
+            else => "",
+        };
+
+        std.debug.print("{s}{s}", .{ type_prefix, item.display_string });
+        std.debug.print("\n", .{});
     }
 }
