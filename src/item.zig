@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const Type = enum(u8) {
     // === RFC defined. ===
     ///Item is a file
@@ -81,3 +83,15 @@ pub const Type = enum(u8) {
         };
     }
 };
+
+type: Type,
+display_string: []const u8,
+selector: []const u8,
+hostname: []const u8,
+port: u16,
+
+pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+    allocator.free(self.selector);
+    allocator.free(self.hostname);
+    allocator.free(self.display_string);
+}
