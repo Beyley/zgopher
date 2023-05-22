@@ -82,16 +82,47 @@ pub const Type = enum(u8) {
             _ => false,
         };
     }
+
+    pub fn selectable(self: Type) bool {
+        return switch (self) {
+            .file => true,
+            .directory => true,
+            .cso_phone_book_server => true,
+            .@"error" => false,
+            .binhexed_macintosh_file => true,
+            .dos_binary_archive => true,
+            .unix_uuencoded_file => true,
+            .index_search => true,
+            .text_based_telnet_session => true,
+            .binary_file => true,
+            .redundant_server => false,
+            .text_based_tn3270_session => true,
+            .gif => true,
+            .image_file => true,
+            .bitmap_image => true,
+            .movie_file => true,
+            .sound_file => true,
+            .doc_file => true,
+            .html_file => true,
+            .information_message => false,
+            .image_file_hinted_png => true,
+            .rtf_file => true,
+            .sound_file_hinted_wav => true,
+            .pdf_file => true,
+            .xml_file => true,
+            _ => false,
+        };
+    }
 };
 
 type: Type,
 display_string: []const u8,
 selector: []const u8,
-hostname: []const u8,
+host: []const u8,
 port: u16,
 
 pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
     allocator.free(self.selector);
-    allocator.free(self.hostname);
+    allocator.free(self.host);
     allocator.free(self.display_string);
 }

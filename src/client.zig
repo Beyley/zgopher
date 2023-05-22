@@ -82,7 +82,7 @@ pub fn request(allocator: std.mem.Allocator, name: []const u8, port: u16, select
                         .type = line_type,
                         .display_string = try allocator.dupe(u8, line[0..idx1]),
                         .selector = try allocator.dupe(u8, line[(idx1 + 1)..idx2]),
-                        .hostname = try allocator.dupe(u8, line[(idx2 + 1)..idx3]),
+                        .host = try allocator.dupe(u8, line[(idx2 + 1)..idx3]),
                         .port = try std.fmt.parseInt(u16, line[(idx3 + 1)..], 0),
                     });
                 } else {
@@ -102,7 +102,39 @@ pub fn request(allocator: std.mem.Allocator, name: []const u8, port: u16, select
     }
 }
 
+fn printGopherspace(response: Response) !void {
+    var selectable_counter: usize = 0;
+    for (response.directory.items) |itema| {
+        var item: Item = itema;
+
+        if (item.type.selectable()) {
+            debug.print("[{d}] ", .{selectable_counter});
+            selectable_counter += 1;
+        }
+
+        var type_prefix = switch (item.type) {
+            .file => "🗏",
+            .directory => "📁",
+            else => "",
+        };
+
+        debug.print("{s}{s}", .{ type_prefix, item.display_string });
+
+        switch (item.type) {
+            .file, .directory => {
+                debug.print(" ({s}:{d} {s})", .{ item.host, item.port, item.selector });
+            },
+            else => {},
+        }
+
+        debug.print("\n", .{});
+    }
+}
+
 pub fn main() !void {
+    var stdin = std.io.getStdIn();
+    defer stdin.close();
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var allocator = gpa.allocator();
     defer {
@@ -115,7 +147,7 @@ pub fn main() !void {
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit.
         \\-p, --port <u16>   An option parameter, which takes a value.
-        \\<str>...  The hostname to connect to
+        \\<str>...  The host to connect to
         \\
     );
 
@@ -123,56 +155,109 @@ pub fn main() !void {
     // This is optional. You can also pass `.{}` to `clap.parse` if you don't
     // care about the extra information `Diagnostics` provides.
     var diag = clap.Diagnostic{};
-    var res = clap.parse(clap.Help, &params, clap.parsers.default, .{
+    var parsed_args = clap.parse(clap.Help, &params, clap.parsers.default, .{
         .diagnostic = &diag,
     }) catch |err| {
         // Report useful error and exit
         diag.report(std.io.getStdErr().writer(), err) catch {};
         return err;
     };
-    defer res.deinit();
+    defer parsed_args.deinit();
 
     //If they specified help, print the usage string
-    if (res.args.help != 0)
+    if (parsed_args.args.help != 0)
         return clap.usage(std.io.getStdErr().writer(), clap.Help, &params);
 
-    if (res.positionals.len == 0)
+    if (parsed_args.positionals.len == 0)
         return clap.usage(std.io.getStdErr().writer(), clap.Help, &params);
 
-    var host = res.positionals[0];
-    var port = if (res.args.port) |port| port else 70;
+    var original_host = parsed_args.positionals[0];
+    var original_port = if (parsed_args.args.port) |arg_port| arg_port else 70;
+    var original_selector = "";
+
+    var host: ?[]const u8 = null;
+    var port: ?u16 = null;
+    var selector: ?[]const u8 = null;
+
+    defer {
+        if (host) |host_val| {
+            allocator.free(host_val);
+            host = null;
+        }
+        if (selector) |selector_val| {
+            allocator.free(selector_val);
+            selector = null;
+        }
+    }
 
     //Init network
     try network.init();
     defer network.deinit();
 
-    var response = try request(
-        allocator,
-        host,
-        port,
-        "",
-        .directory,
-    );
-    defer response.deinit(allocator);
+    var response: ?Response = null;
+    defer if (response) |res|
+        res.deinit(allocator);
 
-    for (response.directory.items) |itema| {
-        var item: Item = itema;
+    var next_request_type: ?Type = .directory;
+    while (true) {
+        if (next_request_type != null) {
+            //If response exists, free it
+            if (response) |res| {
+                res.deinit(allocator);
+                response = null;
+            }
 
-        var type_prefix = switch (item.type) {
-            .file => "F ",
-            .directory => "D ",
-            else => "",
-        };
+            //Make a request
+            response = try request(
+                allocator,
+                host orelse original_host,
+                port orelse original_port,
+                selector orelse original_selector,
+                next_request_type.?,
+            );
 
-        debug.print("{s}{s}", .{ type_prefix, item.display_string });
-
-        switch (item.type) {
-            .file, .directory => {
-                debug.print(" ({s}:{d} {s})", .{ item.hostname, item.port, item.selector });
-            },
-            else => {},
+            next_request_type = null;
         }
 
-        debug.print("\n", .{});
+        //Print the gopherspace
+        try printGopherspace(response.?);
+
+        debug.print("[?] ", .{});
+        var read = try stdin.reader().readUntilDelimiterOrEofAlloc(allocator, '\n', 10000) orelse break;
+        defer allocator.free(read);
+
+        //q = quit
+        if (read[0] == 'q') {
+            break;
+        }
+
+        var choice = try std.fmt.parseInt(usize, read, 0);
+
+        var selectable_counter: usize = 0;
+        for (response.?.directory.items) |itema| {
+            var item: Item = itema;
+
+            if (!item.type.selectable()) {
+                continue;
+            }
+
+            if (selectable_counter == choice) {
+                if (host) |host_val| {
+                    allocator.free(host_val);
+                    host = null;
+                }
+                if (selector) |selector_val| {
+                    allocator.free(selector_val);
+                    selector = null;
+                }
+                host = try allocator.dupe(u8, item.host);
+                selector = try allocator.dupe(u8, item.selector);
+                port = item.port;
+                next_request_type = item.type;
+                break;
+            }
+
+            selectable_counter += 1;
+        }
     }
 }
