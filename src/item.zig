@@ -1,4 +1,5 @@
 const std = @import("std");
+const network = @import("network");
 
 pub const Type = enum(u8) {
     // === RFC defined. ===
@@ -121,7 +122,29 @@ selector: []const u8,
 host: []const u8,
 port: u16,
 
-pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+const Self = @This();
+
+pub fn serialize(self: Self, allocator: std.mem.Allocator, writer: network.Socket.Writer) !void {
+    //Write the type
+    try writer.writeByte(@enumToInt(self.type));
+    try writer.writeAll(self.display_string);
+    try writer.writeByte('\t');
+    try writer.writeAll(self.selector);
+    try writer.writeByte('\t');
+    try writer.writeAll(self.host);
+    try writer.writeByte('\t');
+
+    //Print the port into a string
+    var port = try std.fmt.allocPrint(allocator, "{d}", .{self.port});
+    defer allocator.free(port);
+
+    try writer.writeAll(port);
+
+    //Write the line ending
+    try writer.writeAll("\r\n");
+}
+
+pub fn deinit(self: Self, allocator: std.mem.Allocator) void {
     allocator.free(self.selector);
     allocator.free(self.host);
     allocator.free(self.display_string);
