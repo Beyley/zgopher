@@ -15,11 +15,17 @@ const Response = union(enum) {
             allocator.free(self.items);
         }
     },
+    file: struct {
+        data: []const u8,
+
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            allocator.free(self.data);
+        }
+    },
     pub fn deinit(self: Response, allocator: std.mem.Allocator) void {
         switch (self) {
-            .directory => |dir| {
-                dir.deinit(allocator);
-            },
+            .directory => |dir| dir.deinit(allocator),
+            .file => |file| file.deinit(allocator),
         }
     }
 };
@@ -84,6 +90,11 @@ pub fn request(allocator: std.mem.Allocator, name: []const u8, port: u16, select
 
             return .{ .directory = .{ .items = try items.toOwnedSlice() } };
         },
+        .file => {
+            var file = try connection.reader().readAllAlloc(allocator, std.math.maxInt(usize));
+            defer allocator.free(file);
+            return .{ .file = .{ .data = try allocator.dupe(u8, file[0 .. file.len - 3]) } };
+        },
         else => @panic("Cannot make a request with that type"),
     }
 }
@@ -120,6 +131,25 @@ pub fn main() !void {
         };
 
         std.debug.print("{s}{s}", .{ type_prefix, item.display_string });
+
+        switch (item.type) {
+            .file, .directory => {
+                std.debug.print(" ({s}:{d} {s})", .{ item.hostname, item.port, item.selector });
+            },
+            else => {},
+        }
+
         std.debug.print("\n", .{});
     }
+
+    var file_response = try request(
+        allocator,
+        "gopher.floodgap.com",
+        70,
+        "/ptloma",
+        .file,
+    );
+    defer file_response.deinit(allocator);
+
+    std.debug.print("\n\n\nFILE: {s}\n", .{file_response.file.data});
 }
