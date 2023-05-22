@@ -102,7 +102,7 @@ pub fn request(allocator: std.mem.Allocator, name: []const u8, port: u16, select
     }
 }
 
-fn printGopherspace(response: Response) !void {
+fn printGopherspace(response: Response, unicode: bool) !void {
     var selectable_counter: usize = 0;
     for (response.directory.items) |itema| {
         var item: Item = itema;
@@ -113,8 +113,8 @@ fn printGopherspace(response: Response) !void {
         }
 
         var type_prefix = switch (item.type) {
-            .file => "🗏",
-            .directory => "📁",
+            .file => if (unicode) "🗏" else "F ",
+            .directory => if (unicode) "📁" else "D ",
             else => "",
         };
 
@@ -134,6 +134,8 @@ fn printGopherspace(response: Response) !void {
 pub fn main() !void {
     var stdin = std.io.getStdIn();
     defer stdin.close();
+
+    const unicode = !std.mem.eql(u8, std.os.getenv("TERM") orelse "vt100", "vt100");
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var allocator = gpa.allocator();
@@ -220,7 +222,7 @@ pub fn main() !void {
         }
 
         //Print the gopherspace
-        try printGopherspace(response.?);
+        try printGopherspace(response.?, unicode);
 
         debug.print("[?] ", .{});
         var read = try stdin.reader().readUntilDelimiterOrEofAlloc(allocator, '\n', 10000) orelse break;
