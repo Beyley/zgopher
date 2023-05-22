@@ -7,8 +7,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const module = b.addModule("network", .{
+    const network = b.addModule("network", .{
         .source_file = .{ .path = "libs/zig-network/network.zig" },
+    });
+    const clap = b.addModule("clap", .{
+        .source_file = .{ .path = "libs/zig-clap/clap.zig" },
     });
 
     const server = b.addExecutable(.{
@@ -17,7 +20,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    server.addModule("network", module);
+    server.addModule("network", network);
+    server.addModule("clap", clap);
 
     b.installArtifact(server);
 
@@ -27,7 +31,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    client.addModule("network", module);
+    client.addModule("network", network);
+    client.addModule("clap", clap);
 
     b.installArtifact(client);
 

@@ -1,5 +1,8 @@
 const std = @import("std");
 const network = @import("network");
+const clap = @import("clap");
+
+const debug = std.debug;
 
 const Item = @import("item.zig");
 const Type = Item.Type;
@@ -51,7 +54,7 @@ pub fn request(allocator: std.mem.Allocator, name: []const u8, port: u16, select
             while (true) {
                 var raw_type = try connection.reader().readByte();
 
-                // std.debug.print("type: {d}/{c}\n", .{ raw_type, raw_type });
+                // debug.print("type: {d}/{c}\n", .{ raw_type, raw_type });
 
                 //If the server a `.` that marks the end of the connection, so lets break out
                 if (raw_type == '.') {
@@ -68,7 +71,7 @@ pub fn request(allocator: std.mem.Allocator, name: []const u8, port: u16, select
                 //If the line type is valid,
                 if (line_type.isValid()) {
                     //Print the nice name of the type
-                    // std.debug.print("line: {s} \"{s}\"\n", .{ @tagName(line_type), line });
+                    // debug.print("line: {s} \"{s}\"\n", .{ @tagName(line_type), line });
 
                     //Get the index of the first TAB
                     var idx1 = std.mem.indexOf(u8, line, "\t") orelse @panic("Invalid gopher line!");
@@ -84,7 +87,7 @@ pub fn request(allocator: std.mem.Allocator, name: []const u8, port: u16, select
                     });
                 } else {
                     //Print the raw ascii version of the type
-                    // std.debug.print("line: {c} \"{s}\"\n", .{ raw_type, line });
+                    // debug.print("line: {c} \"{s}\"\n", .{ raw_type, line });
                 }
             }
 
@@ -108,14 +111,45 @@ pub fn main() !void {
         }
     }
 
+    //The help parameters
+    const params = comptime clap.parseParamsComptime(
+        \\-h, --help             Display this help and exit.
+        \\-p, --port <u16>   An option parameter, which takes a value.
+        \\<str>...  The hostname to connect to
+        \\
+    );
+
+    // Initialize our diagnostics, which can be used for reporting useful errors.
+    // This is optional. You can also pass `.{}` to `clap.parse` if you don't
+    // care about the extra information `Diagnostics` provides.
+    var diag = clap.Diagnostic{};
+    var res = clap.parse(clap.Help, &params, clap.parsers.default, .{
+        .diagnostic = &diag,
+    }) catch |err| {
+        // Report useful error and exit
+        diag.report(std.io.getStdErr().writer(), err) catch {};
+        return err;
+    };
+    defer res.deinit();
+
+    //If they specified help, print the usage string
+    if (res.args.help != 0)
+        return clap.usage(std.io.getStdErr().writer(), clap.Help, &params);
+
+    if (res.positionals.len == 0)
+        return clap.usage(std.io.getStdErr().writer(), clap.Help, &params);
+
+    var host = res.positionals[0];
+    var port = if (res.args.port) |port| port else 70;
+
     //Init network
     try network.init();
     defer network.deinit();
 
     var response = try request(
         allocator,
-        "gopher.floodgap.com",
-        70,
+        host,
+        port,
         "",
         .directory,
     );
@@ -130,26 +164,15 @@ pub fn main() !void {
             else => "",
         };
 
-        std.debug.print("{s}{s}", .{ type_prefix, item.display_string });
+        debug.print("{s}{s}", .{ type_prefix, item.display_string });
 
         switch (item.type) {
             .file, .directory => {
-                std.debug.print(" ({s}:{d} {s})", .{ item.hostname, item.port, item.selector });
+                debug.print(" ({s}:{d} {s})", .{ item.hostname, item.port, item.selector });
             },
             else => {},
         }
 
-        std.debug.print("\n", .{});
+        debug.print("\n", .{});
     }
-
-    var file_response = try request(
-        allocator,
-        "gopher.floodgap.com",
-        70,
-        "/ptloma",
-        .file,
-    );
-    defer file_response.deinit(allocator);
-
-    std.debug.print("\n\n\nFILE: {s}\n", .{file_response.file.data});
 }
