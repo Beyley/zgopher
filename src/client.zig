@@ -46,7 +46,13 @@ pub fn request(allocator: std.mem.Allocator, name: []const u8, port: u16, select
         .directory => {
             //Create the list that will contain all of our items
             var items = std.ArrayList(Item).init(allocator);
-            defer items.deinit();
+            errdefer {
+                for (items.items) |item| {
+                    item.deinit(allocator);
+                }
+
+                items.deinit();
+            }
 
             //Create the buffer that contains the working line
             var working_line = try allocator.alloc(u8, 1024);
@@ -227,6 +233,11 @@ pub fn main() !void {
         debug.print("[?] ", .{});
         var read = try stdin.reader().readUntilDelimiterOrEofAlloc(allocator, '\n', 10000) orelse break;
         defer allocator.free(read);
+
+        //If they didnt type anything, just try again
+        if (read.len == 0) {
+            continue;
+        }
 
         //q = quit
         if (read[0] == 'q') {
