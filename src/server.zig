@@ -2,6 +2,8 @@ const std = @import("std");
 const network = @import("network");
 const clap = @import("clap");
 
+const ServerConfig = @import("server_config.zig");
+
 pub fn main() !void {
     //The help parameters
     const params = comptime clap.parseParamsComptime(
@@ -34,6 +36,31 @@ pub fn main() !void {
     defer if (gpa.deinit() == .leak) @panic("Memory Leak!");
 
     const allocator = gpa.allocator();
+
+    var config = ServerConfig{
+        .allow_listing_in_dirs = &.{},
+        .root_dir = ".",
+        .template_file = null,
+    };
+
+    var config_file: std.fs.File = try (std.fs.cwd().openFile("config.json", .{}) catch |err| {
+        if (err == std.fs.File.OpenError.FileNotFound) {
+            var file = try std.fs.cwd().createFile("config.json", .{});
+
+            try std.json.stringify(config, .{}, file.writer());
+
+            return file;
+        } else {
+            return err;
+        }
+    });
+    defer config_file.close();
+
+    var config_file_contents = try allocator.alloc(u8, try config_file.getEndPos());
+    var token_stream = std.json.TokenStream.init(config_file_contents);
+    config = try std.json.parse(ServerConfig, &token_stream, .{ .allocator = allocator });
+    defer std.json.parseFree(ServerConfig, config, .{ .allocator = allocator });
+    allocator.free(config_file_contents);
 
     const port_number = if (parsed_args.args.port) |port| port else 70;
 
