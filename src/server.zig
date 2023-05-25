@@ -77,13 +77,14 @@ pub fn main() !void {
         var client = try socket.accept();
 
         //Spawn a new thread to handle the client
-        var t = try std.Thread.spawn(.{}, runClient, .{ client, allocator });
+        var t = try std.Thread.spawn(.{}, runClient, .{ client, allocator, &config });
         //Detatch the thread, let it LIVE
         t.detach();
     }
 }
 
-fn runClient(client: network.Socket, allocator: std.mem.Allocator) !void {
+fn runClient(client: network.Socket, allocator: std.mem.Allocator, config: *const ServerConfig) !void {
+    _ = config;
     defer client.close();
 
     //Create a new buffer to store our working data

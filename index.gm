@@ -1,0 +1,19 @@
+# this is a comment, it wont be taken into account when generating the gopher page
+# Blank lines are ignored
+
+iThis is a test information line, the time is $TIME$ on $DATE$, server is $SERVER_NAME$
+
+# this is a directory listing of the current directory this gophermap represents
+D. 
+
+# this is a directory listing of the src/ directory
+Dsrc/
+
+# this is a direct file link
+Fsrc/client.zig
+# this is a direct file link with a custom display name
+Fsrc/client.zig "client source code"
+
+# this is a direct file link to a file on another server, in the format of
+# [selector] [display name] [server url] [port (optional)]
+Fsrc/client.zig "client source code" gopher.floodgap.com 70
