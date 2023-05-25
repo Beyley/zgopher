@@ -37,32 +37,32 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
-    var config = ServerConfig{
-        .allow_listing_in_dirs = &.{},
-        .root_dir = ".",
-        .template_file = null,
-    };
+    //The default config
+    var config = ServerConfig{};
 
-    var config_file: std.fs.File = try (std.fs.cwd().openFile("config.json", .{}) catch |err| {
-        if (err == std.fs.File.OpenError.FileNotFound) {
-            var file = try std.fs.cwd().createFile("config.json", .{});
+    //Open the config file, if the file isnt found, create a new file
+    var config_file = std.fs.cwd().openFile("config.json", .{}) catch |err| if (err == std.fs.File.OpenError.FileNotFound) try std.fs.cwd().createFile("config.json", .{ .read = true }) else return err;
 
-            try std.json.stringify(config, .{}, file.writer());
+    //If the file is blank,
+    if (try config_file.getEndPos() == 0) {
+        //Write the default config to the file
+        try std.json.stringify(config, .{}, config_file.writer());
 
-            return file;
-        } else {
-            return err;
-        }
-    });
-    defer config_file.close();
+        //Seek back to the start
+        try config_file.seekTo(0);
+    }
 
-    var config_file_contents = try allocator.alloc(u8, try config_file.getEndPos());
-    var token_stream = std.json.TokenStream.init(config_file_contents);
-    config = try std.json.parse(ServerConfig, &token_stream, .{ .allocator = allocator });
-    defer std.json.parseFree(ServerConfig, config, .{ .allocator = allocator });
-    allocator.free(config_file_contents);
+    //Create a reader to stream the JSON tokens from the file
+    var reader = std.json.reader(allocator, config_file.reader());
 
-    const port_number = if (parsed_args.args.port) |port| port else 70;
+    //Parse the config from the reader
+    config = try std.json.parseFromTokenSource(ServerConfig, allocator, &reader, .{});
+    defer std.json.parseFree(ServerConfig, allocator, config);
+
+    //Close the file, since we dont need it anymore
+    config_file.close();
+
+    const port_number = if (parsed_args.args.port) |port| port else config.port;
 
     var socket = try network.Socket.create(.ipv4, .tcp);
     defer socket.close();
